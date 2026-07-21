@@ -1,0 +1,373 @@
+"""
+Machine Failure Log Classifier - Streamlit application.
+
+Model: tuned XGBoost (max_depth=4, learning_rate=0.1, n_estimators=300) trained on
+the SMOTE-resampled dataset. XGBoost exposes predict_proba, so the app can show
+class probabilities directly.
+
+Interface language: Bahasa Indonesia by default, switchable to English.
+The layout follows the Eight Golden Rules of Interface Design (Shneiderman et al., 2016);
+see the comments marked [Rule N] for where each rule is addressed.
+"""
+
+import re
+import numpy as np
+import joblib
+import streamlit as st
+from scipy.sparse import hstack
+
+# ---------------------------------------------------------------------------
+# Stage 1: the labeler - used ONLY to explain the input (interpretability).
+# It does not feed the classifier.
+# ---------------------------------------------------------------------------
+DESCRIPTION_LF = {
+    'LEAK':        ['LEAK','LEAKING','BOCOR','KEBOCORAN','KEBCORAN','REMBES','REMBESAN','DRIP'],
+    'OVERHEAT':    ['OVERHEAT','OVER HEAT','OVERHT','OVERHEAD','HOT','PANAS','TEMP HIGH','TEMPERATURE','WRAM'],
+    'LOW POWER':   ['LOW POWER','LOWPOWER','LOW PWR','POWERLESS','LEMAH','WEAK','KURANG TENAGA'],
+    'CONSUMPTION': ['TOP UP','EMPTY','KOSONG','HABIS','LOW LEVEL','LOW OIL','LOW HYD','HYD LOW',
+                    'LOW FUEL','OIL LOW','OLI LOW','LOW PRESSURE','FSS LOW'],
+    'NO_START':    ['CANT START',"CAN'T START",'TIDAK BISA START','NO START','CANT',
+                    'TIDAK BISA','SHUTDOWN','SHUT DOWN','OFF','MATI','PARKIR','STOP'],
+    'BROKEN':      ['BROKEN','PUTUS','RUSAK','PATAH','CRACK','RETAK','BEND','BENGKOK',
+                    'PECAH','MISSING','HILANG','FAIL','FAILED','MALFUNCTION','TUMPUL'],
+    'LOOSE':       ['LOOSE','LOSE','KENDOR','LEPAS','COPOT','LONGGAR'],
+    'STUCK':       ['STUCK','JAMMED','MACET','JAM','FROZEN','NGELOCK','LOCKED','LOCK',
+                    'TIDAK GERAK','TIDAK BERFUNGSI','TIDAK MAU'],
+    'ABNORMAL':    ['ABNORMAL','ABN','ERROR','EROR','WARNING','ALARM','FAULT','CODE',
+                    'CONTAMINATION','CONTAMINASI','PRESSURE'],
+    'NOISE':       ['NOISE','BUNYI','SUARA','BERISIK','SMOKE','TICK','KNOCK'],
+}
+ACTIVITY_LF = {
+    'REPLACE':  ['REPLACE','GANTI','GNT'],
+    'REPAIR':   ['REPAIR','RIPAIR','PERBAIKI','WELDING','WELD','REORING','ORING','REPOSISI','MODIF'],
+    'INSPECT':  ['CHECK','CEK','CHEK','T/S','TS','INSPEKSI','INSPECTION','TROUBLESHOOT','TEST'],
+    'ADJUST':   ['ADJUST','LEVELING','CALIBRATE','KALIBRASI','ALIGN','RETORQUE','STANDARISASI','TORQUE'],
+    'INSTALL':  ['INSTALL','NSTALL','PASANG','MOUNT','CONNECT','CONECT','COUPLE'],
+    'REMOVE':   ['REMOVE','LEPAS','CABUT','DISCONNECT','UNCOUPLE'],
+    'CLEAN':    ['CLEANING','CLEAN','WASHING','WASH','BERSIHKAN','GREASING'],
+    'REFILL':   ['ADD','TOP','RECHARGE','FILL','ISI','TAMBAH','RECOVERY'],
+    'RESET':    ['RESET','RESTART','REBOOT'],
+}
+
+# Plain-language gloss for each labeler output, so the explanation is readable
+# by a technician rather than being a bare code. [Rule 8]
+SYMPTOM_GLOSS = {
+    'LEAK':        {'id': 'Kebocoran',            'en': 'Leak'},
+    'OVERHEAT':    {'id': 'Panas berlebih',       'en': 'Overheating'},
+    'LOW POWER':   {'id': 'Kurang power',         'en': 'Low power'},
+    'CONSUMPTION': {'id': 'Level/isi berkurang',  'en': 'Low level / consumption'},
+    'NO_START':    {'id': 'Tidak bisa start/mati','en': 'Will not start / shut down'},
+    'BROKEN':      {'id': 'Rusak/patah',          'en': 'Broken'},
+    'LOOSE':       {'id': 'Kendor/lepas',         'en': 'Loose'},
+    'STUCK':       {'id': 'Tersangkut',           'en': 'Stuck'},
+    'ABNORMAL':    {'id': 'Tidak normal/error',   'en': 'Abnormal / error'},
+    'NOISE':       {'id': 'Bunyi tidak normal',   'en': 'Unusual noise'},
+    'UNLABELED':   {'id': 'Tidak dikenali',       'en': 'Not recognised'},
+}
+ACTION_GLOSS = {
+    'REPLACE':   {'id': 'Ganti',        'en': 'Replace'},
+    'REPAIR':    {'id': 'Perbaiki',     'en': 'Repair'},
+    'INSPECT':   {'id': 'Periksa/cek',  'en': 'Inspect'},
+    'ADJUST':    {'id': 'Setel',        'en': 'Adjust'},
+    'INSTALL':   {'id': 'Pasang',       'en': 'Install'},
+    'REMOVE':    {'id': 'Lepas',        'en': 'Remove'},
+    'CLEAN':     {'id': 'Bersihkan',    'en': 'Clean'},
+    'REFILL':    {'id': 'Isi/tambah',   'en': 'Refill'},
+    'RESET':     {'id': 'Reset',        'en': 'Reset'},
+    'UNLABELED': {'id': 'Tidak dikenali','en': 'Not recognised'},
+}
+
+
+def apply_lf(text, lfs):
+    """Return the first label whose keyword matches, or UNLABELED if none do."""
+    if text is None or str(text).strip() == '':
+        return 'UNLABELED'
+    s = str(text).upper()
+    for label, kws in lfs.items():
+        for kw in kws:
+            if len(kw) <= 3:
+                if re.search(r'\b' + re.escape(kw) + r'\b', s):
+                    return label
+            elif kw in s:
+                return label
+    return 'UNLABELED'
+
+
+# ---------------------------------------------------------------------------
+# Interface strings. Bahasa Indonesia is the default; English is available via
+# the language selector. Wording is kept parallel between the two. [Rule 1]
+# ---------------------------------------------------------------------------
+T = {
+    'id': {
+        'title': 'Klasifikasi Penyebab Kerusakan Alat',
+        'subtitle': 'Masukkan log kerusakan, aplikasi akan memprediksi Penyebab (Cause) '
+                    'dan menjelaskan isi teks yang Anda masukkan.',
+        'lang_label': 'Bahasa',
+        'desc_label': 'Deskripsi kerusakan (gejala)',
+        'desc_help': 'Tulis gejala yang dilaporkan, contoh: TRACK LH LOOSE',
+        'act_label': 'Aktivitas perbaikan (tindakan)',
+        'act_help': 'Tulis tindakan yang dilakukan, contoh: INSTALL & ADJUST TRACK',
+        'obj_label': 'Komponen (Object)',
+        'obj_help': 'Pilih sistem komponen yang mengalami kerusakan',
+        'submit': 'Prediksi Penyebab',
+        'clear': 'Bersihkan',
+        'hint_enter': 'Tekan Enter pada kolom teks untuk langsung memprediksi.',
+        'err_both_empty': 'Mohon isi Deskripsi dan/atau Aktivitas terlebih dahulu.',
+        'warn_desc_empty': 'Kolom Deskripsi kosong. Prediksi hanya memakai Aktivitas, '
+                           'sehingga hasilnya bisa kurang akurat.',
+        'warn_act_empty': 'Kolom Aktivitas kosong. Prediksi hanya memakai Deskripsi, '
+                          'sehingga hasilnya bisa kurang akurat.',
+        'warn_too_short': 'Teks yang dimasukkan sangat pendek. Tambahkan keterangan '
+                          'agar prediksi lebih dapat diandalkan.',
+        'spinner': 'Memproses log...',
+        'result_header': 'Hasil Prediksi',
+        'predicted': 'Penyebab (Cause)',
+        'your_input': 'Log yang Anda masukkan',
+        'top3': 'Kandidat teratas',
+        'other_note': '"OTHER" berarti penyebabnya di luar 10 kategori umum. '
+                      'Mohon ditinjau secara manual.',
+        'low_conf': 'Model kurang yakin pada log ini. Sebaiknya ditinjau manual.',
+        'explain_header': 'Pembacaan teks Anda',
+        'explain_note': 'Bagian ini hanya menjelaskan isi teks; prediksi di atas '
+                        'tetap dihitung dari teks lengkap.',
+        'symptom': 'Gejala pada Deskripsi',
+        'action': 'Tindakan pada Aktivitas',
+        'unrecognised': 'Sebagian teks tidak dikenali oleh penjelas. Prediksi tetap '
+                        'menggunakan teks lengkap.',
+        'done': 'Selesai. Ubah isian di atas lalu tekan "Prediksi Penyebab" untuk log berikutnya, '
+                'atau tekan "Bersihkan" untuk mulai dari awal.',
+        'history': 'Riwayat prediksi (sesi ini)',
+        'history_empty': 'Belum ada prediksi pada sesi ini.',
+        'causes_header': 'Daftar kategori Penyebab yang dikenali',
+        'causes_note': 'Model mengenali 10 kategori berikut, ditambah OTHER untuk penyebab '
+                       'yang jarang terjadi.',
+        'model_error': 'File model "cause_classifier.joblib" tidak ditemukan atau tidak dapat '
+                       'dibaca. Pastikan file berada di folder yang sama dengan app.py, '
+                       'lalu muat ulang halaman.',
+        'model_error_detail': 'Detail teknis',
+    },
+    'en': {
+        'title': 'Machine Failure Cause Classifier',
+        'subtitle': 'Enter a failure log; the app predicts the Cause and explains '
+                    'what your text says.',
+        'lang_label': 'Language',
+        'desc_label': 'Failure description (symptom)',
+        'desc_help': 'Describe the reported symptom, e.g. TRACK LH LOOSE',
+        'act_label': 'Repair activity (action)',
+        'act_help': 'Describe the action taken, e.g. INSTALL & ADJUST TRACK',
+        'obj_label': 'Component (Object)',
+        'obj_help': 'Select the component system involved',
+        'submit': 'Predict Cause',
+        'clear': 'Clear',
+        'hint_enter': 'Press Enter in a text field to predict immediately.',
+        'err_both_empty': 'Please enter a Description and/or an Activity first.',
+        'warn_desc_empty': 'The Description field is empty. The prediction uses only the '
+                           'Activity, so it may be less reliable.',
+        'warn_act_empty': 'The Activity field is empty. The prediction uses only the '
+                          'Description, so it may be less reliable.',
+        'warn_too_short': 'The text entered is very short. Add more detail for a more '
+                          'reliable prediction.',
+        'spinner': 'Processing the log...',
+        'result_header': 'Prediction Result',
+        'predicted': 'Cause',
+        'your_input': 'The log you entered',
+        'top3': 'Top candidates',
+        'other_note': '"OTHER" means the cause falls outside the 10 common categories. '
+                      'Please review it manually.',
+        'low_conf': 'The model is less certain about this record. Consider reviewing it manually.',
+        'explain_header': 'How your text was read',
+        'explain_note': 'This section only explains the text; the prediction above is still '
+                        'computed from the full text.',
+        'symptom': 'Symptom in the Description',
+        'action': 'Action in the Activity',
+        'unrecognised': 'Part of the text was not recognised by the explainer. The prediction '
+                        'still uses the full text.',
+        'done': 'Done. Edit the fields above and press "Predict Cause" for the next log, '
+                'or press "Clear" to start over.',
+        'history': 'Prediction history (this session)',
+        'history_empty': 'No predictions yet in this session.',
+        'causes_header': 'Cause categories the model recognises',
+        'causes_note': 'The model recognises the following 10 categories, plus OTHER for '
+                       'rarely occurring causes.',
+        'model_error': 'The model file "cause_classifier.joblib" could not be found or read. '
+                       'Make sure it is in the same folder as app.py, then reload the page.',
+        'model_error_detail': 'Technical details',
+    },
+}
+
+st.set_page_config(page_title='Machine Failure Log Classifier', page_icon='🔧')
+
+# ---------------------------------------------------------------------------
+# Session state: results persist across reruns so that changing a widget does
+# not make the previous result disappear. [Rules 3, 4, 6]
+# ---------------------------------------------------------------------------
+if 'result' not in st.session_state:
+    st.session_state.result = None
+if 'history' not in st.session_state:
+    st.session_state.history = []
+
+# Language selector - the user controls the interface. [Rule 7]
+lang_choice = st.sidebar.radio(
+    T['id']['lang_label'] + ' / ' + T['en']['lang_label'],
+    options=['id', 'en'],
+    format_func=lambda c: 'Bahasa Indonesia' if c == 'id' else 'English',
+    index=0,
+)
+t = T[lang_choice]
+
+
+# ---------------------------------------------------------------------------
+# Load trained artifacts, with a readable message if the file is missing or was
+# produced by a different scikit-learn version. [Rule 5]
+# ---------------------------------------------------------------------------
+@st.cache_resource
+def load_bundle():
+    return joblib.load('cause_classifier.joblib')
+
+
+try:
+    bundle = load_bundle()
+except Exception as exc:  # missing file, version mismatch, corrupt pickle
+    st.error(t['model_error'])
+    with st.expander(t['model_error_detail']):
+        st.code(f'{type(exc).__name__}: {exc}')
+    st.stop()
+
+tfidf          = bundle['tfidf']
+obj_encoder    = bundle['obj_encoder']
+classifier     = bundle['classifier']
+label_encoder  = bundle['label_encoder']
+object_options = bundle['object_options']
+
+st.title(t['title'])
+st.caption(t['subtitle'])
+
+
+def clear_form():
+    """Reset every field and the current result. [Rule 6]"""
+    st.session_state.desc_input = ''
+    st.session_state.act_input = ''
+    st.session_state.obj_input = object_options[0]
+    st.session_state.result = None
+
+
+# ---------------------------------------------------------------------------
+# Input form. Using st.form means Enter submits the form directly, which gives
+# frequent users a keyboard shortcut instead of forcing a mouse click. [Rule 2]
+# ---------------------------------------------------------------------------
+with st.form('log_form'):
+    description = st.text_input(t['desc_label'], key='desc_input',
+                                placeholder='TRACK LH LOOSE', help=t['desc_help'])
+    activity = st.text_input(t['act_label'], key='act_input',
+                             placeholder='INSTALL & ADJUST TRACK', help=t['act_help'])
+    obj = st.selectbox(t['obj_label'], object_options, key='obj_input', help=t['obj_help'])
+    col_a, col_b = st.columns([1, 1])
+    with col_a:
+        submitted = st.form_submit_button(t['submit'], type='primary')
+    with col_b:
+        st.form_submit_button(t['clear'], on_click=clear_form)
+st.caption(t['hint_enter'])
+
+# Reference list of recognised causes, always available without leaving the
+# screen, so the user need not memorise the label space. [Rule 8]
+with st.expander(t['causes_header']):
+    st.caption(t['causes_note'])
+    st.write(', '.join([c for c in label_encoder.classes_ if c != 'OTHER']))
+
+# ---------------------------------------------------------------------------
+# Handle a submission
+# ---------------------------------------------------------------------------
+if submitted:
+    desc_text = (description or '').strip()
+    act_text = (activity or '').strip()
+
+    if not desc_text and not act_text:
+        # Blocking error: nothing to classify. [Rule 5]
+        st.error(t['err_both_empty'])
+        st.session_state.result = None
+    else:
+        notices = []
+        if not desc_text:
+            notices.append(t['warn_desc_empty'])
+        if not act_text:
+            notices.append(t['warn_act_empty'])
+        if len((desc_text + ' ' + act_text).strip()) < 5:
+            notices.append(t['warn_too_short'])
+
+        text = (desc_text + ' ' + act_text).strip()
+        with st.spinner(t['spinner']):  # progress feedback [Rule 3]
+            X = hstack([tfidf.transform([text]),
+                        obj_encoder.transform([[obj]])]).tocsr()
+            probs = np.ravel(classifier.predict_proba(X))
+            order = np.argsort(probs)[::-1][:3]
+            top3 = [(label_encoder.classes_[i], float(probs[i])) for i in order]
+
+        st.session_state.result = {
+            'cause': top3[0][0],
+            'top3': top3,
+            'desc': desc_text,
+            'act': act_text,
+            'obj': obj,
+            'symptom': apply_lf(desc_text, DESCRIPTION_LF),
+            'action': apply_lf(act_text, ACTIVITY_LF),
+            'notices': notices,
+        }
+        # Keep the last five predictions so a frequent user can look back
+        # without re-entering anything. [Rules 2, 8]
+        st.session_state.history.insert(0, {
+            'desc': desc_text, 'act': act_text,
+            'obj': obj, 'cause': top3[0][0], 'conf': top3[0][1],
+        })
+        st.session_state.history = st.session_state.history[:5]
+
+# ---------------------------------------------------------------------------
+# Render the stored result. Because this reads from session state rather than
+# from the button, it survives any later widget interaction. [Rules 3, 4, 6]
+# ---------------------------------------------------------------------------
+res = st.session_state.result
+if res:
+    for note in res['notices']:
+        st.warning(note)
+
+    st.divider()
+    st.subheader(t['result_header'])
+
+    # Echo the submitted input so the user can confirm what was classified. [Rule 3]
+    st.caption(
+        f"{t['your_input']}: \"{res['desc']}\" / \"{res['act']}\" / {res['obj']}"
+    )
+
+    st.metric(t['predicted'], res['cause'])
+    if res['cause'] == 'OTHER':
+        st.info(t['other_note'])
+    if res['top3'][0][1] < 0.90:
+        st.info(t['low_conf'])
+
+    # Top-3 candidates. Note: boosted trees trained on SMOTE-resampled data are
+    # sharply over-confident (median top-1 probability around 0.99), so these
+    # figures rank the candidates reliably but are not calibrated frequencies.
+    st.write(f"**{t['top3']}**")
+    for name, p in res['top3']:
+        st.progress(min(max(float(p), 0.0), 1.0), text=f'{name} - {p*100:.1f}%')
+
+    # Interpretability layer, clearly separated from the prediction itself.
+    st.divider()
+    st.markdown(f"**{t['explain_header']}**")
+    st.caption(t['explain_note'])
+    sym, act = res['symptom'], res['action']
+    st.write(f"- {t['symptom']}: **{SYMPTOM_GLOSS.get(sym, {}).get(lang_choice, sym)}** (`{sym}`)")
+    st.write(f"- {t['action']}: **{ACTION_GLOSS.get(act, {}).get(lang_choice, act)}** (`{act}`)")
+    if sym == 'UNLABELED' or act == 'UNLABELED':
+        st.caption(t['unrecognised'])
+
+    # Explicit closure, telling the user the task is finished and what to do
+    # next, rather than leaving the result hanging. [Rule 4]
+    st.divider()
+    st.success(t['done'])
+
+# Session history, shown last so it never competes with the current result.
+if st.session_state.history:
+    with st.expander(f"{t['history']} ({len(st.session_state.history)})"):
+        for i, h in enumerate(st.session_state.history, start=1):
+            st.write(f"{i}. \"{h['desc']}\" / \"{h['act']}\" / {h['obj']} "
+                     f"-> **{h['cause']}** ({h['conf']*100:.0f}%)")
