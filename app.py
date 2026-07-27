@@ -195,8 +195,9 @@ T = {
     },
 }
 
-st.set_page_config(page_title='Machine Failure Log Classifier', page_icon='🔧')
-
+st.set_page_config(page_title='Machine Failure Log Classifier', page_icon='🔧',
+                   layout='wide', initial_sidebar_state='collapsed')
+ 
 # ---------------------------------------------------------------------------
 # Session state: results persist across reruns so that changing a widget does
 # not make the previous result disappear. [Rules 3, 4, 6]
@@ -205,17 +206,26 @@ if 'result' not in st.session_state:
     st.session_state.result = None
 if 'history' not in st.session_state:
     st.session_state.history = []
-
-# Language selector - the user controls the interface. [Rule 7]
-lang_choice = st.sidebar.radio(
-    T['id']['lang_label'] + ' / ' + T['en']['lang_label'],
-    options=['id', 'en'],
-    format_func=lambda c: 'Bahasa Indonesia' if c == 'id' else 'English',
-    index=0,
-)
+ 
+# Center all content in a wide-but-bounded middle column so the wide layout
+# does not stretch the form edge to edge.
+_pad_l, body, _pad_r = st.columns([1, 4, 1])
+ 
+# Language selector - compact segmented control at the top right of the content,
+# replacing the old sidebar panel. The user controls the interface language. [Rule 7]
+with body:
+    _spacer, _lang = st.columns([4, 1])
+    with _lang:
+        lang_choice = st.segmented_control(
+            'Bahasa / Language',
+            options=['id', 'en'],
+            format_func=lambda c: 'ID' if c == 'id' else 'EN',
+            default='id',
+            label_visibility='collapsed',
+        ) or 'id'
 t = T[lang_choice]
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # Load trained artifacts, with a readable message if the file is missing or was
 # produced by a different scikit-learn version. [Rule 5]
@@ -223,67 +233,67 @@ t = T[lang_choice]
 @st.cache_resource
 def load_bundle():
     return joblib.load('cause_classifier.joblib')
-
-
+ 
+ 
 try:
     bundle = load_bundle()
 except Exception as exc:  # missing file, version mismatch, corrupt pickle
-    st.error(t['model_error'])
-    with st.expander(t['model_error_detail']):
+    body.error(t['model_error'])
+    with body.expander(t['model_error_detail']):
         st.code(f'{type(exc).__name__}: {exc}')
     st.stop()
-
+ 
 tfidf          = bundle['tfidf']
 obj_encoder    = bundle['obj_encoder']
 classifier     = bundle['classifier']
 label_encoder  = bundle['label_encoder']
 object_options = bundle['object_options']
-
-st.title(t['title'])
-st.caption(t['subtitle'])
-
-
+ 
+body.title(t['title'])
+body.caption(t['subtitle'])
+ 
+ 
 def clear_form():
     """Reset every field and the current result. [Rule 6]"""
     st.session_state.desc_input = ''
     st.session_state.act_input = ''
     st.session_state.obj_input = object_options[0]
     st.session_state.result = None
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # Input form. Using st.form means Enter submits the form directly, which gives
 # frequent users a keyboard shortcut instead of forcing a mouse click. [Rule 2]
 # ---------------------------------------------------------------------------
-with st.form('log_form'):
+with body.form('log_form'):
     description = st.text_input(t['desc_label'], key='desc_input',
                                 placeholder='TRACK LH LOOSE', help=t['desc_help'])
     activity = st.text_input(t['act_label'], key='act_input',
                              placeholder='INSTALL & ADJUST TRACK', help=t['act_help'])
     obj = st.selectbox(t['obj_label'], object_options, key='obj_input', help=t['obj_help'])
-    col_a, col_b = st.columns([1, 1])
+    col_a, col_gap, col_b = st.columns([2, 3, 2])
     with col_a:
-        submitted = st.form_submit_button(t['submit'], type='primary')
+        submitted = st.form_submit_button(t['submit'], type='primary', use_container_width=True)
     with col_b:
-        st.form_submit_button(t['clear'], on_click=clear_form)
-st.caption(t['hint_enter'])
-
+        st.form_submit_button(t['clear'], on_click=clear_form, use_container_width=True)
+body.caption(t['hint_enter'])
+ 
 # Reference list of recognised causes, always available without leaving the
 # screen, so the user need not memorise the label space. [Rule 8]
-with st.expander(t['causes_header']):
+with body.expander(t['causes_header']):
     st.caption(t['causes_note'])
     st.write(', '.join([c for c in label_encoder.classes_ if c != 'OTHER']))
-
+ 
 # ---------------------------------------------------------------------------
 # Handle a submission
 # ---------------------------------------------------------------------------
 if submitted:
     desc_text = (description or '').strip()
     act_text = (activity or '').strip()
-
+ 
     if not desc_text and not act_text:
         # Blocking error: nothing to classify. [Rule 5]
-        st.error(t['err_both_empty'])
+        body.error(t['err_both_empty'])
         st.session_state.result = None
     else:
         notices = []
@@ -293,7 +303,7 @@ if submitted:
             notices.append(t['warn_act_empty'])
         if len((desc_text + ' ' + act_text).strip()) < 5:
             notices.append(t['warn_too_short'])
-
+ 
         text = (desc_text + ' ' + act_text).strip()
         with st.spinner(t['spinner']):  # progress feedback [Rule 3]
             X = hstack([tfidf.transform([text]),
@@ -301,7 +311,7 @@ if submitted:
             probs = np.ravel(classifier.predict_proba(X))
             order = np.argsort(probs)[::-1][:3]
             top3 = [(label_encoder.classes_[i], float(probs[i])) for i in order]
-
+ 
         st.session_state.result = {
             'cause': top3[0][0],
             'top3': top3,
@@ -319,55 +329,57 @@ if submitted:
             'obj': obj, 'cause': top3[0][0], 'conf': top3[0][1],
         })
         st.session_state.history = st.session_state.history[:5]
-
+ 
 # ---------------------------------------------------------------------------
 # Render the stored result. Because this reads from session state rather than
 # from the button, it survives any later widget interaction. [Rules 3, 4, 6]
 # ---------------------------------------------------------------------------
 res = st.session_state.result
 if res:
-    for note in res['notices']:
-        st.warning(note)
-
-    st.divider()
-    st.subheader(t['result_header'])
-
-    # Echo the submitted input so the user can confirm what was classified. [Rule 3]
-    st.caption(
-        f"{t['your_input']}: \"{res['desc']}\" / \"{res['act']}\" / {res['obj']}"
-    )
-
-    st.metric(t['predicted'], res['cause'])
-    if res['cause'] == 'OTHER':
-        st.info(t['other_note'])
-    if res['top3'][0][1] < 0.90:
-        st.info(t['low_conf'])
-
-    # Top-3 candidates. Note: boosted trees trained on SMOTE-resampled data are
-    # sharply over-confident (median top-1 probability around 0.99), so these
-    # figures rank the candidates reliably but are not calibrated frequencies.
-    st.write(f"**{t['top3']}**")
-    for name, p in res['top3']:
-        st.progress(min(max(float(p), 0.0), 1.0), text=f'{name} - {p*100:.1f}%')
-
-    # Interpretability layer, clearly separated from the prediction itself.
-    st.divider()
-    st.markdown(f"**{t['explain_header']}**")
-    st.caption(t['explain_note'])
-    sym, act = res['symptom'], res['action']
-    st.write(f"- {t['symptom']}: **{SYMPTOM_GLOSS.get(sym, {}).get(lang_choice, sym)}** (`{sym}`)")
-    st.write(f"- {t['action']}: **{ACTION_GLOSS.get(act, {}).get(lang_choice, act)}** (`{act}`)")
-    if sym == 'UNLABELED' or act == 'UNLABELED':
-        st.caption(t['unrecognised'])
-
-    # Explicit closure, telling the user the task is finished and what to do
-    # next, rather than leaving the result hanging. [Rule 4]
-    st.divider()
-    st.success(t['done'])
-
+  with body:
+      for note in res['notices']:
+          st.warning(note)
+ 
+      st.divider()
+      st.subheader(t['result_header'])
+ 
+      # Echo the submitted input so the user can confirm what was classified. [Rule 3]
+      st.caption(
+          f"{t['your_input']}: \"{res['desc']}\" / \"{res['act']}\" / {res['obj']}"
+      )
+ 
+      st.metric(t['predicted'], res['cause'])
+      if res['cause'] == 'OTHER':
+          st.info(t['other_note'])
+      if res['top3'][0][1] < 0.90:
+          st.info(t['low_conf'])
+ 
+      # Top-3 candidates. Note: boosted trees trained on SMOTE-resampled data are
+      # sharply over-confident (median top-1 probability around 0.99), so these
+      # figures rank the candidates reliably but are not calibrated frequencies.
+      st.write(f"**{t['top3']}**")
+      for name, p in res['top3']:
+          st.progress(min(max(float(p), 0.0), 1.0), text=f'{name} - {p*100:.1f}%')
+ 
+      # Interpretability layer, clearly separated from the prediction itself.
+      st.divider()
+      st.markdown(f"**{t['explain_header']}**")
+      st.caption(t['explain_note'])
+      sym, act = res['symptom'], res['action']
+      st.write(f"- {t['symptom']}: **{SYMPTOM_GLOSS.get(sym, {}).get(lang_choice, sym)}** (`{sym}`)")
+      st.write(f"- {t['action']}: **{ACTION_GLOSS.get(act, {}).get(lang_choice, act)}** (`{act}`)")
+      if sym == 'UNLABELED' or act == 'UNLABELED':
+          st.caption(t['unrecognised'])
+ 
+      # Explicit closure, telling the user the task is finished and what to do
+      # next, rather than leaving the result hanging. [Rule 4]
+      st.divider()
+      st.success(t['done'])
+ 
 # Session history, shown last so it never competes with the current result.
 if st.session_state.history:
-    with st.expander(f"{t['history']} ({len(st.session_state.history)})"):
+    with body.expander(f"{t['history']} ({len(st.session_state.history)})"):
         for i, h in enumerate(st.session_state.history, start=1):
             st.write(f"{i}. \"{h['desc']}\" / \"{h['act']}\" / {h['obj']} "
                      f"-> **{h['cause']}** ({h['conf']*100:.0f}%)")
+
