@@ -1,25 +1,12 @@
-"""
-Machine Failure Log Classifier - Streamlit application.
-
-Model: tuned XGBoost (max_depth=4, learning_rate=0.1, n_estimators=300) trained on
-the SMOTE-resampled dataset. XGBoost exposes predict_proba, so the app can show
-class probabilities directly.
-
-Interface language: Bahasa Indonesia by default, switchable to English.
-The layout follows the Eight Golden Rules of Interface Design (Shneiderman et al., 2016);
-see the comments marked [Rule N] for where each rule is addressed.
-"""
-
 import re
 import numpy as np
 import joblib
 import streamlit as st
 from scipy.sparse import hstack
 
-# ---------------------------------------------------------------------------
-# Stage 1: the labeler - used ONLY to explain the input (interpretability).
-# It does not feed the classifier.
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
+# Labeler - used ONLY to explain the input (interpretability).
+# =---------------------------------------------------------------------------=
 DESCRIPTION_LF = {
     'LEAK':        ['LEAK','LEAKING','BOCOR','KEBOCORAN','KEBCORAN','REMBES','REMBESAN','DRIP'],
     'OVERHEAT':    ['OVERHEAT','OVER HEAT','OVERHT','OVERHEAD','HOT','PANAS','TEMP HIGH','TEMPERATURE','WRAM'],
@@ -93,10 +80,10 @@ def apply_lf(text, lfs):
     return 'UNLABELED'
 
 
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 # Interface strings. Bahasa Indonesia is the default; English is available via
 # the language selector. Wording is kept parallel between the two. [Rule 1]
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 T = {
     'id': {
         'title': 'Klasifikasi Penyebab Kerusakan Alat',
@@ -198,10 +185,10 @@ T = {
 st.set_page_config(page_title='Machine Failure Log Classifier', page_icon='🔧',
                    layout='wide', initial_sidebar_state='collapsed')
  
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 # Session state: results persist across reruns so that changing a widget does
 # not make the previous result disappear. [Rules 3, 4, 6]
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 if 'result' not in st.session_state:
     st.session_state.result = None
 if 'history' not in st.session_state:
@@ -226,10 +213,10 @@ with body:
 t = T[lang_choice]
  
  
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 # Load trained artifacts, with a readable message if the file is missing or was
 # produced by a different scikit-learn version. [Rule 5]
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 @st.cache_resource
 def load_bundle():
     return joblib.load('cause_classifier.joblib')
@@ -261,10 +248,10 @@ def clear_form():
     st.session_state.result = None
  
  
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 # Input form. Using st.form means Enter submits the form directly, which gives
 # frequent users a keyboard shortcut instead of forcing a mouse click. [Rule 2]
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 with body.form('log_form'):
     description = st.text_input(t['desc_label'], key='desc_input',
                                 placeholder='TRACK LH LOOSE', help=t['desc_help'])
@@ -284,9 +271,9 @@ with body.expander(t['causes_header']):
     st.caption(t['causes_note'])
     st.write(', '.join([c for c in label_encoder.classes_ if c != 'OTHER']))
  
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 # Handle a submission
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 if submitted:
     desc_text = (description or '').strip()
     act_text = (activity or '').strip()
@@ -330,10 +317,10 @@ if submitted:
         })
         st.session_state.history = st.session_state.history[:5]
  
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 # Render the stored result. Because this reads from session state rather than
 # from the button, it survives any later widget interaction. [Rules 3, 4, 6]
-# ---------------------------------------------------------------------------
+# =---------------------------------------------------------------------------=
 res = st.session_state.result
 if res:
   with body:
