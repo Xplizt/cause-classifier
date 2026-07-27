@@ -110,7 +110,7 @@ T = {
         'obj_label': 'Komponen (Object)',
         'obj_help': 'Pilih sistem komponen yang mengalami kerusakan',
         'submit': 'Prediksi Penyebab',
-        'clear': 'Bersihkan',
+        'clear': 'Hapus Semua',
         'hint_enter': 'Tekan Enter pada kolom teks untuk langsung memprediksi.',
         'err_both_empty': 'Mohon isi Deskripsi dan/atau Aktivitas terlebih dahulu.',
         'warn_desc_empty': 'Kolom Deskripsi kosong. Prediksi hanya memakai Aktivitas, '
@@ -134,8 +134,8 @@ T = {
         'action': 'Tindakan pada Aktivitas',
         'unrecognised': 'Sebagian teks tidak dikenali oleh penjelas. Prediksi tetap '
                         'menggunakan teks lengkap.',
-        'done': 'Selesai. Ubah isian di atas lalu tekan "Prediksi Penyebab" untuk log berikutnya, '
-                'atau tekan "Bersihkan" untuk mulai dari awal.',
+        'done': 'Selesai. Ubah input di atas lalu tekan "Prediksi Penyebab" untuk log berikutnya, '
+                'atau tekan "Hapus Semua" untuk mulai dari awal.',
         'history': 'Riwayat prediksi (sesi ini)',
         'history_empty': 'Belum ada prediksi pada sesi ini.',
         'causes_header': 'Daftar kategori Penyebab yang dikenali',
