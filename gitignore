@@ -1,0 +1,11 @@
+# never commit the private dataset
+OB_Loader_1_.xlsx
+*.xlsx
+
+# local env / build artifacts
+venv/
+.venv/
+__pycache__/
+*.ipynb
+.ipynb_checkpoints/
+.DS_Store
