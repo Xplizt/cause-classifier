@@ -120,8 +120,7 @@ T = {
         'guide_result2': '**Kandidat teratas** — 3 kemungkinan penyebab beserta persentase keyakinannya.',
         'guide_result3': '**Pembacaan teks Anda** — penjelasan gejala & tindakan yang dibaca aplikasi '
                          'dari teks Anda.',
-        'guide_note': 'Tidak perlu paham soal alat berat — gunakan saja contoh yang tersedia. '
-                      'Fokus penilaian ada pada tampilan & kemudahan aplikasi, bukan ketepatan prediksi.',
+        'guide_note': 'Jika tidak paham tentang alat berat, gunakan saja contoh yang tersedia.',
         'submit': 'Prediksi Penyebab',
         'clear': 'Hapus Semua',
         'hint_enter': 'Tekan Enter pada kolom teks untuk langsung memprediksi.',
@@ -194,9 +193,7 @@ T = {
         'guide_result2': '**Top candidates** — the 3 most likely causes with confidence percentages.',
         'guide_result3': '**How your text was read** — the symptom & action the app recognised in '
                          'your text.',
-        'guide_note': 'You do not need to know anything about heavy equipment — just use the provided '
-                      'examples. The evaluation is about the app\'s look and ease of use, not the '
-                      'accuracy of the prediction.',
+        'guide_note': 'If you do not know anything about heavy machinery, just use the provided examples.',
         'submit': 'Predict Cause',
         'clear': 'Clear',
         'hint_enter': 'Press Enter in a text field to predict immediately.',
