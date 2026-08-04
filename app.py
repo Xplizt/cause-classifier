@@ -96,6 +96,16 @@ T = {
         'act_help': 'Tulis tindakan yang dilakukan, contoh: INSTALL & ADJUST TRACK',
         'obj_label': 'Komponen (Object)',
         'obj_help': 'Pilih sistem komponen yang mengalami kerusakan',
+        'desc_helper': 'Tuliskan gejala kerusakan secara singkat, seperti yang dicatat teknisi. '
+                       'Contoh: "AC PANAS", "TRACK LH LOOSE", "OVERHEAT".',
+        'act_helper': 'Tuliskan tindakan perbaikan yang dilakukan. '
+                      'Contoh: "REPLACE HOSE", "CLEAN UP FILTER AC", "CHECK WIRING".',
+        'obj_helper': 'Sistem/komponen tempat kerusakan terjadi (mesin, AC, undercarriage, dll).',
+        'example_label': 'Belum tahu harus menulis apa? Coba salah satu contoh:',
+        'example_none': 'Pilih contoh...',
+        'glossary_header': 'Panduan istilah alat berat (untuk orang awam)',
+        'glossary_intro': 'Log kerusakan ditulis oleh teknisi dengan istilah teknis, campuran '
+                          'Bahasa Indonesia dan Inggris. Berikut arti istilah yang sering muncul:',
         'submit': 'Prediksi Penyebab',
         'clear': 'Hapus Semua',
         'hint_enter': 'Tekan Enter pada kolom teks untuk langsung memprediksi.',
@@ -144,6 +154,16 @@ T = {
         'act_help': 'Describe the action taken, e.g. INSTALL & ADJUST TRACK',
         'obj_label': 'Component (Object)',
         'obj_help': 'Select the component system involved',
+        'desc_helper': 'Write the failure symptom briefly, the way a technician logs it. '
+                       'Example: "AC PANAS", "TRACK LH LOOSE", "OVERHEAT".',
+        'act_helper': 'Write the repair action taken. '
+                      'Example: "REPLACE HOSE", "CLEAN UP FILTER AC", "CHECK WIRING".',
+        'obj_helper': 'The system/component where the failure occurred (engine, AC, undercarriage, etc.).',
+        'example_label': 'Not sure what to write? Try one of these examples:',
+        'example_none': 'Choose an example...',
+        'glossary_header': 'Heavy-equipment term guide (for non-specialists)',
+        'glossary_intro': 'Failure logs are written by technicians using technical terms, mixing '
+                          'Indonesian and English. Here are commonly seen terms:',
         'submit': 'Predict Cause',
         'clear': 'Clear',
         'hint_enter': 'Press Enter in a text field to predict immediately.',
