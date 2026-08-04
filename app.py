@@ -182,22 +182,57 @@ T = {
     },
 }
 
+# Preset example logs (real, in-distribution cases) so a general-public respondent
+# can try the app without knowing heavy-equipment shorthand. [Rule 2 / onboarding]
+EXAMPLE_LOGS = [
+    ('Kebocoran selang hidrolik / Hydraulic hose leak',
+     'HOSE TREVAL KANAN LEAK', 'REPLACE HOSE TRAVEL', 'HYD SYSTEMS'),
+    ('Tenaga mesin lemah / Low engine power',
+     'LOW POWER ENGINE', 'REPLACE FUEL FILTER', 'ENGINE'),
+    ('AC panas / AC not cooling',
+     'AC PANAS', 'CLEAN UP FILTER AC', 'AC SYSTEMS'),
+    ('Track kendor / Loose track',
+     'TRACK LH LOOSE', 'INSTALL & ADJUST TRACK LH', 'UNDERCARRIAGE'),
+    ('Mesin overheat / Engine overheating',
+     'OVERHEAT', 'WASHING RADIATOR, COOLER HYD', 'ENGINE'),
+    ('Tidak bisa start / Will not start',
+     'CANT START', 'CHECK WIRING STARTING', 'ELECTRICS'),
+]
+
+# Plain-language glossary of the shorthand that appears in the logs, bilingual.
+GLOSSARY = [
+    ('LEAK / BOCOR', 'Kebocoran cairan (oli, hidrolik) — a fluid leak'),
+    ('OVERHEAT / PANAS', 'Suhu terlalu tinggi — component running too hot'),
+    ('LOW POWER / LEMAH', 'Tenaga berkurang — reduced engine/hydraulic power'),
+    ('TRACK', 'Rantai roda pada excavator/dozer — the crawler track'),
+    ('UNDERCARRIAGE', 'Bagian bawah alat (track, roller, idler) — the running gear'),
+    ('HOSE / SELANG', 'Selang saluran cairan — a fluid hose'),
+    ('HYD / HYDRAULIC', 'Sistem hidrolik — the hydraulic system'),
+    ('AC PANAS', 'AC tidak dingin / kepanasan — air-conditioning not cooling'),
+    ('CANT START / MATI', 'Alat tidak bisa dinyalakan — the machine will not start'),
+    ('LOOSE / KENDOR', 'Komponen longgar — a loose part'),
+    ('REPLACE / GANTI', 'Mengganti komponen — replacing a part'),
+    ('CHECK / CEK', 'Memeriksa — inspecting/checking'),
+    ('ADJUST / SETEL', 'Menyetel ulang — adjusting'),
+    ('CLEAN / BERSIHKAN', 'Membersihkan — cleaning'),
+]
+
 st.set_page_config(page_title='Machine Failure Log Classifier', page_icon='🔧',
                    layout='wide', initial_sidebar_state='collapsed')
- 
-# =---------------------------------------------------------------------------=
+
+# ---------------------------------------------------------------------------
 # Session state: results persist across reruns so that changing a widget does
 # not make the previous result disappear. [Rules 3, 4, 6]
-# =---------------------------------------------------------------------------=
+# ---------------------------------------------------------------------------
 if 'result' not in st.session_state:
     st.session_state.result = None
 if 'history' not in st.session_state:
     st.session_state.history = []
- 
+
 # Center all content in a wide-but-bounded middle column so the wide layout
 # does not stretch the form edge to edge.
 _pad_l, body, _pad_r = st.columns([1, 4, 1])
- 
+
 # Language selector - compact segmented control at the top right of the content,
 # replacing the old sidebar panel. The user controls the interface language. [Rule 7]
 with body:
@@ -211,17 +246,17 @@ with body:
             label_visibility='collapsed',
         ) or 'id'
 t = T[lang_choice]
- 
- 
-# =---------------------------------------------------------------------------=
+
+
+# ---------------------------------------------------------------------------
 # Load trained artifacts, with a readable message if the file is missing or was
 # produced by a different scikit-learn version. [Rule 5]
-# =---------------------------------------------------------------------------=
+# ---------------------------------------------------------------------------
 @st.cache_resource
 def load_bundle():
     return joblib.load('cause_classifier.joblib')
- 
- 
+
+
 try:
     bundle = load_bundle()
 except Exception as exc:  # missing file, version mismatch, corrupt pickle
@@ -229,55 +264,88 @@ except Exception as exc:  # missing file, version mismatch, corrupt pickle
     with body.expander(t['model_error_detail']):
         st.code(f'{type(exc).__name__}: {exc}')
     st.stop()
- 
+
 tfidf          = bundle['tfidf']
 obj_encoder    = bundle['obj_encoder']
 classifier     = bundle['classifier']
 label_encoder  = bundle['label_encoder']
 object_options = bundle['object_options']
- 
+
 body.title(t['title'])
 body.caption(t['subtitle'])
- 
- 
+
+
 def clear_form():
     """Reset every field and the current result. [Rule 6]"""
     st.session_state.desc_input = ''
     st.session_state.act_input = ''
     st.session_state.obj_input = object_options[0]
+    st.session_state.example_pick = 0
     st.session_state.result = None
- 
- 
-# =---------------------------------------------------------------------------=
+
+
+def fill_example():
+    """Populate the fields from the chosen preset example. Helps a general-public
+    respondent who does not know heavy-equipment shorthand get valid input."""
+    idx = st.session_state.get('example_pick')
+    if idx is None or idx == 0:
+        return
+    _label, desc, act, ex_obj = EXAMPLE_LOGS[idx - 1]
+    st.session_state.desc_input = desc
+    st.session_state.act_input = act
+    if ex_obj in object_options:
+        st.session_state.obj_input = ex_obj
+    st.session_state.result = None
+
+
+# Example picker + glossary sit OUTSIDE the form, so selecting an example fills
+# the fields immediately (a form would defer the callback until submit).
+with body.container():
+    st.selectbox(
+        t['example_label'],
+        options=list(range(len(EXAMPLE_LOGS) + 1)),
+        format_func=lambda i: t['example_none'] if i == 0 else EXAMPLE_LOGS[i - 1][0],
+        key='example_pick',
+        on_change=fill_example,
+    )
+    with st.expander(t['glossary_header']):
+        st.caption(t['glossary_intro'])
+        for term, meaning in GLOSSARY:
+            st.markdown(f"- **{term}** — {meaning}")
+
+# ---------------------------------------------------------------------------
 # Input form. Using st.form means Enter submits the form directly, which gives
 # frequent users a keyboard shortcut instead of forcing a mouse click. [Rule 2]
-# =---------------------------------------------------------------------------=
+# ---------------------------------------------------------------------------
 with body.form('log_form'):
     description = st.text_input(t['desc_label'], key='desc_input',
                                 placeholder='TRACK LH LOOSE', help=t['desc_help'])
+    st.caption(t['desc_helper'])
     activity = st.text_input(t['act_label'], key='act_input',
                              placeholder='INSTALL & ADJUST TRACK', help=t['act_help'])
+    st.caption(t['act_helper'])
     obj = st.selectbox(t['obj_label'], object_options, key='obj_input', help=t['obj_help'])
+    st.caption(t['obj_helper'])
     col_a, col_gap, col_b = st.columns([2, 3, 2])
     with col_a:
         submitted = st.form_submit_button(t['submit'], type='primary', use_container_width=True)
     with col_b:
         st.form_submit_button(t['clear'], on_click=clear_form, use_container_width=True)
 body.caption(t['hint_enter'])
- 
+
 # Reference list of recognised causes, always available without leaving the
 # screen, so the user need not memorise the label space. [Rule 8]
 with body.expander(t['causes_header']):
     st.caption(t['causes_note'])
     st.write(', '.join([c for c in label_encoder.classes_ if c != 'OTHER']))
- 
-# =---------------------------------------------------------------------------=
+
+# ---------------------------------------------------------------------------
 # Handle a submission
-# =---------------------------------------------------------------------------=
+# ---------------------------------------------------------------------------
 if submitted:
     desc_text = (description or '').strip()
     act_text = (activity or '').strip()
- 
+
     if not desc_text and not act_text:
         # Blocking error: nothing to classify. [Rule 5]
         body.error(t['err_both_empty'])
@@ -290,7 +358,7 @@ if submitted:
             notices.append(t['warn_act_empty'])
         if len((desc_text + ' ' + act_text).strip()) < 5:
             notices.append(t['warn_too_short'])
- 
+
         text = (desc_text + ' ' + act_text).strip()
         with st.spinner(t['spinner']):  # progress feedback [Rule 3]
             X = hstack([tfidf.transform([text]),
@@ -298,7 +366,7 @@ if submitted:
             probs = np.ravel(classifier.predict_proba(X))
             order = np.argsort(probs)[::-1][:3]
             top3 = [(label_encoder.classes_[i], float(probs[i])) for i in order]
- 
+
         st.session_state.result = {
             'cause': top3[0][0],
             'top3': top3,
@@ -316,38 +384,38 @@ if submitted:
             'obj': obj, 'cause': top3[0][0], 'conf': top3[0][1],
         })
         st.session_state.history = st.session_state.history[:5]
- 
-# =---------------------------------------------------------------------------=
+
+# ---------------------------------------------------------------------------
 # Render the stored result. Because this reads from session state rather than
 # from the button, it survives any later widget interaction. [Rules 3, 4, 6]
-# =---------------------------------------------------------------------------=
+# ---------------------------------------------------------------------------
 res = st.session_state.result
 if res:
   with body:
       for note in res['notices']:
           st.warning(note)
- 
+
       st.divider()
       st.subheader(t['result_header'])
- 
+
       # Echo the submitted input so the user can confirm what was classified. [Rule 3]
       st.caption(
           f"{t['your_input']}: \"{res['desc']}\" / \"{res['act']}\" / {res['obj']}"
       )
- 
+
       st.metric(t['predicted'], res['cause'])
       if res['cause'] == 'OTHER':
           st.info(t['other_note'])
       if res['top3'][0][1] < 0.90:
           st.info(t['low_conf'])
- 
+
       # Top-3 candidates. Note: boosted trees trained on SMOTE-resampled data are
       # sharply over-confident (median top-1 probability around 0.99), so these
       # figures rank the candidates reliably but are not calibrated frequencies.
       st.write(f"**{t['top3']}**")
       for name, p in res['top3']:
           st.progress(min(max(float(p), 0.0), 1.0), text=f'{name} - {p*100:.1f}%')
- 
+
       # Interpretability layer, clearly separated from the prediction itself.
       st.divider()
       st.markdown(f"**{t['explain_header']}**")
@@ -357,12 +425,12 @@ if res:
       st.write(f"- {t['action']}: **{ACTION_GLOSS.get(act, {}).get(lang_choice, act)}** (`{act}`)")
       if sym == 'UNLABELED' or act == 'UNLABELED':
           st.caption(t['unrecognised'])
- 
+
       # Explicit closure, telling the user the task is finished and what to do
       # next, rather than leaving the result hanging. [Rule 4]
       st.divider()
       st.success(t['done'])
- 
+
 # Session history, shown last so it never competes with the current result.
 if st.session_state.history:
     with body.expander(f"{t['history']} ({len(st.session_state.history)})"):
