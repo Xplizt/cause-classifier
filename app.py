@@ -106,6 +106,22 @@ T = {
         'glossary_header': 'Panduan istilah alat berat (untuk orang awam)',
         'glossary_intro': 'Log kerusakan ditulis oleh teknisi dengan istilah teknis, campuran '
                           'Bahasa Indonesia dan Inggris. Berikut arti istilah yang sering muncul:',
+        'guide_header': 'Panduan singkat',
+        'guide_purpose': 'Aplikasi ini memprediksi **penyebab kerusakan alat berat** dari catatan '
+                         'kerusakan yang ditulis teknisi. Anda cukup memasukkan gejala, tindakan '
+                         'perbaikan, dan komponennya, lalu aplikasi menebak penyebab utamanya.',
+        'guide_steps_title': 'Langkah-langkah:',
+        'guide_step1': 'Pilih salah satu **contoh** di dropdown (paling mudah), atau isi sendiri '
+                       'ketiga kolom di bawah.',
+        'guide_step2': 'Tekan tombol **"Prediksi Penyebab"**.',
+        'guide_step3': 'Lihat hasilnya di bawah tombol.',
+        'guide_result_title': 'Cara membaca hasil:',
+        'guide_result1': '**Penyebab (Cause)** — tebakan utama aplikasi.',
+        'guide_result2': '**Kandidat teratas** — 3 kemungkinan penyebab beserta persentase keyakinannya.',
+        'guide_result3': '**Pembacaan teks Anda** — penjelasan gejala & tindakan yang dibaca aplikasi '
+                         'dari teks Anda.',
+        'guide_note': 'Tidak perlu paham soal alat berat — gunakan saja contoh yang tersedia. '
+                      'Fokus penilaian ada pada tampilan & kemudahan aplikasi, bukan ketepatan prediksi.',
         'submit': 'Prediksi Penyebab',
         'clear': 'Hapus Semua',
         'hint_enter': 'Tekan Enter pada kolom teks untuk langsung memprediksi.',
@@ -164,6 +180,23 @@ T = {
         'glossary_header': 'Heavy-equipment term guide (for non-specialists)',
         'glossary_intro': 'Failure logs are written by technicians using technical terms, mixing '
                           'Indonesian and English. Here are commonly seen terms:',
+        'guide_header': 'Quick guide',
+        'guide_purpose': 'This app predicts the **cause of a heavy-equipment failure** from a '
+                         'technician\'s failure log. You enter the symptom, the repair action, and '
+                         'the component, and the app predicts the most likely cause.',
+        'guide_steps_title': 'Steps:',
+        'guide_step1': 'Pick one of the **examples** in the dropdown (easiest), or fill in the three '
+                       'fields below yourself.',
+        'guide_step2': 'Press the **"Predict Cause"** button.',
+        'guide_step3': 'Read the result shown below the button.',
+        'guide_result_title': 'How to read the result:',
+        'guide_result1': '**Cause** — the app\'s main prediction.',
+        'guide_result2': '**Top candidates** — the 3 most likely causes with confidence percentages.',
+        'guide_result3': '**How your text was read** — the symptom & action the app recognised in '
+                         'your text.',
+        'guide_note': 'You do not need to know anything about heavy equipment — just use the provided '
+                      'examples. The evaluation is about the app\'s look and ease of use, not the '
+                      'accuracy of the prediction.',
         'submit': 'Predict Cause',
         'clear': 'Clear',
         'hint_enter': 'Press Enter in a text field to predict immediately.',
@@ -293,6 +326,20 @@ object_options = bundle['object_options']
 
 body.title(t['title'])
 body.caption(t['subtitle'])
+
+# Quick guide - explains the app's purpose, the steps, and how to read the result.
+# Expanded by default so first-time respondents see it; collapsible to stay tidy.
+with body.expander(t['guide_header'], expanded=True):
+    st.markdown(t['guide_purpose'])
+    st.markdown(f"**{t['guide_steps_title']}**")
+    st.markdown(f"1. {t['guide_step1']}")
+    st.markdown(f"2. {t['guide_step2']}")
+    st.markdown(f"3. {t['guide_step3']}")
+    st.markdown(f"**{t['guide_result_title']}**")
+    st.markdown(f"- {t['guide_result1']}")
+    st.markdown(f"- {t['guide_result2']}")
+    st.markdown(f"- {t['guide_result3']}")
+    st.info(t['guide_note'])
 
 
 def clear_form():
