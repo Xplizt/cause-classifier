@@ -344,17 +344,22 @@ def clear_form():
     st.session_state.desc_input = ''
     st.session_state.act_input = ''
     st.session_state.obj_input = object_options[0]
-    st.session_state.example_pick = 0
+    st.session_state.example_pick = '__none__'
     st.session_state.result = None
 
 
 def fill_example():
     """Populate the fields from the chosen preset example. Helps a general-public
-    respondent who does not know heavy-equipment shorthand get valid input."""
-    idx = st.session_state.get('example_pick')
-    if idx is None or idx == 0:
+    respondent who does not know heavy-equipment shorthand get valid input.
+    Keyed on the example's Description string (language-independent) so the
+    selection survives a language switch."""
+    pick = st.session_state.get('example_pick')
+    if not pick or pick == '__none__':
         return
-    _label, desc, act, ex_obj = EXAMPLE_LOGS[idx - 1]
+    match = next((e for e in EXAMPLE_LOGS if e[1] == pick), None)
+    if match is None:
+        return
+    _label, desc, act, ex_obj = match
     st.session_state.desc_input = desc
     st.session_state.act_input = act
     if ex_obj in object_options:
@@ -364,11 +369,14 @@ def fill_example():
 
 # Example picker + glossary sit OUTSIDE the form, so selecting an example fills
 # the fields immediately (a form would defer the callback until submit).
+# Options are the examples' Description strings (stable across language switches);
+# a sentinel '__none__' is the "no selection" default.
+_example_labels = {e[1]: e[0] for e in EXAMPLE_LOGS}
 with body.container():
     st.selectbox(
         t['example_label'],
-        options=list(range(len(EXAMPLE_LOGS) + 1)),
-        format_func=lambda i: t['example_none'] if i == 0 else EXAMPLE_LOGS[i - 1][0],
+        options=['__none__'] + [e[1] for e in EXAMPLE_LOGS],
+        format_func=lambda v: t['example_none'] if v == '__none__' else _example_labels[v],
         key='example_pick',
         on_change=fill_example,
     )
